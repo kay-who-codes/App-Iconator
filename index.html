@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>iOS Icon Generator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --bg:#0d0f12; --panel:#15181d; --panel2:#1c2027; --border:#2a2f38;
+    --text:#e8eaed; --muted:#8a919c; --accent:#5b8cff; --accent2:#7ee0c3;
+    --danger:#ff6b6b;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    padding:32px 16px 80px;
+  }
+  .wrap{max-width:920px; margin:0 auto;}
+  h1{font-size:1.4rem; margin:0 0 4px;}
+  .sub{color:var(--muted); margin:0 0 28px; font-size:.9rem;}
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:20px; margin-bottom:20px;
+  }
+  .drop{
+    border:2px dashed var(--border); border-radius:12px; padding:28px;
+    text-align:center; cursor:pointer; transition:.15s; position:relative;
+  }
+  .drop.drag{border-color:var(--accent); background:#182034;}
+  .drop p{margin:6px 0; color:var(--muted); font-size:.88rem;}
+  .drop strong{color:var(--text);}
+  textarea{
+    width:100%; min-height:110px; background:var(--panel2); color:var(--text);
+    border:1px solid var(--border); border-radius:10px; padding:12px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.8rem;
+    resize:vertical; margin-top:14px;
+  }
+  input[type=file]{display:none;}
+  .row{display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-top:14px;}
+  button{
+    background:var(--accent); color:#fff; border:none; border-radius:9px;
+    padding:10px 18px; font-size:.9rem; font-weight:600; cursor:pointer;
+    transition:.15s;
+  }
+  button:hover{filter:brightness(1.1);}
+  button:disabled{background:#333944; color:#777; cursor:not-allowed;}
+  button.secondary{background:var(--panel2); border:1px solid var(--border); color:var(--text);}
+  .preview-bar{display:flex; align-items:center; gap:16px; margin-top:14px;}
+  .preview-bar img, .preview-bar svg{
+    width:64px; height:64px; background:#fff; border-radius:12px; padding:6px;
+  }
+  .status{font-size:.85rem; color:var(--muted);}
+  .status.err{color:var(--danger);}
+  .status.ok{color:var(--accent2);}
+  h2{font-size:1rem; margin:0 0 12px; color:var(--text);}
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(74px,1fr));
+    gap:12px; margin-top:6px;
+  }
+  .cell{
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+    padding:8px; text-align:center; font-size:.65rem; color:var(--muted);
+  }
+  .cell canvas{width:100%; height:auto; background:#fff; border-radius:6px; margin-bottom:6px;}
+  .cell b{color:var(--text); display:block; font-size:.68rem;}
+  pre{
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+    padding:14px; font-size:.78rem; overflow-x:auto; line-height:1.55;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--accent2);
+  }
+  .copybtn{float:right; margin-top:-6px;}
+  .hidden{display:none !important;}
+  .folder-note{font-size:.8rem; color:var(--muted); margin-top:8px;}
+  code{color:var(--accent2); background:var(--panel2); padding:1px 5px; border-radius:5px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>iOS App Icon Generator</h1>
+  <p class="sub">Upload or paste an SVG. Get every iOS icon PNG size, packaged and ready, plus the &lt;link&gt; tags for your index.html.</p>
+
+  <div class="card">
+    <div class="drop" id="drop">
+      <strong>Click, drag & drop, or paste an SVG</strong>
+      <p>Accepts .svg files, or Ctrl/Cmd+V pasted SVG markup anywhere on the page</p>
+      <input type="file" id="fileInput" accept=".svg,image/svg+xml">
+    </div>
+    <textarea id="svgText" placeholder="...or paste raw SVG markup here"></textarea>
+    <div class="row">
+      <button id="generateBtn" disabled>Generate Icons</button>
+      <button class="secondary" id="clearBtn">Clear</button>
+      <span class="status" id="status"></span>
+    </div>
+    <div class="preview-bar hidden" id="previewBar">
+      <div id="previewImg"></div>
+      <span class="status">Preview — this is what will be rasterized (square-cropped to the SVG's viewBox)</span>
+    </div>
+  </div>
+
+  <div class="card hidden" id="resultsCard">
+    <h2>Generated Sizes</h2>
+    <div class="grid" id="grid"></div>
+    <div class="row">
+      <button id="downloadZip">Download all as .zip</button>
+      <span class="status" id="zipStatus"></span>
+    </div>
+  </div>
+
+  <div class="card hidden" id="headerCard">
+    <h2>HTML &lt;head&gt; snippet <button class="secondary copybtn" id="copyHead">Copy</button></h2>
+    <p class="folder-note">Assumes PNGs are placed in <code>AppFiles/Icons/</code> relative to your index.html. Change the path below if needed, then re-copy.</p>
+    <div class="row" style="margin-top:0;">
+      <label class="status">Folder path: <input id="folderPath" value="AppFiles/Icons/" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:ui-monospace,monospace;font-size:.8rem;"></label>
+    </div>
+    <pre id="headSnippet"></pre>
+  </div>
+</div>
+
+<script>
+// iOS icon spec: [filename, pixel size, description]
+const SIZES = [
+  ["apple-touch-icon-1024x1024.png", 1024, "App Store"],
+  ["apple-touch-icon-180x180.png", 180, "iPhone Home @3x"],
+  ["apple-touch-icon-167x167.png", 167, "iPad Pro Home @2x"],
+  ["apple-touch-icon-152x152.png", 152, "iPad Home @2x"],
+  ["apple-touch-icon-120x120.png", 120, "iPhone Home @2x"],
+  ["apple-touch-icon-87x87.png", 87, "iPhone Settings @3x"],
+  ["apple-touch-icon-80x80.png", 80, "Spotlight @2x"],
+  ["apple-touch-icon-76x76.png", 76, "iPad Home @1x (legacy)"],
+  ["apple-touch-icon-60x60.png", 60, "Notification @3x"],
+  ["apple-touch-icon-58x58.png", 58, "Settings @2x"],
+  ["apple-touch-icon-40x40.png", 40, "Spotlight @1x"],
+  ["apple-touch-icon-29x29.png", 29, "Settings @1x (legacy)"],
+  ["apple-touch-icon-20x20.png", 20, "Notification @1x (legacy)"],
+];
+
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('fileInput');
+const svgText = document.getElementById('svgText');
+const generateBtn = document.getElementById('generateBtn');
+const clearBtn = document.getElementById('clearBtn');
+const statusEl = document.getElementById('status');
+const previewBar = document.getElementById('previewBar');
+const previewImg = document.getElementById('previewImg');
+const resultsCard = document.getElementById('resultsCard');
+const headerCard = document.getElementById('headerCard');
+const grid = document.getElementById('grid');
+const zipStatus = document.getElementById('zipStatus');
+const folderPathInput = document.getElementById('folderPath');
+const headSnippet = document.getElementById('headSnippet');
+
+let currentSvgString = null;
+let generatedPngs = []; // {filename, size, blob, dataUrl}
+
+function setStatus(msg, type){
+  statusEl.textContent = msg || '';
+  statusEl.className = 'status' + (type ? ' ' + type : '');
+}
+
+function isLikelySvg(str){
+  return /<svg[\s\S]*<\/svg>/i.test(str);
+}
+
+function loadSvg(str){
+  if(!isLikelySvg(str)){
+    setStatus('That doesn\'t look like valid SVG markup.', 'err');
+    generateBtn.disabled = true;
+    previewBar.classList.add('hidden');
+    return;
+  }
+  currentSvgString = str;
+  svgText.value = str;
+  previewImg.innerHTML = str;
+  previewBar.classList.remove('hidden');
+  generateBtn.disabled = false;
+  setStatus('SVG loaded. Ready to generate.', 'ok');
+}
+
+fileInput.addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = () => loadSvg(reader.result);
+  reader.readAsText(f);
+});
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('drag'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault();
+  drop.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = () => loadSvg(reader.result);
+  reader.readAsText(f);
+});
+
+document.addEventListener('paste', (e) => {
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if(text && isLikelySvg(text)){
+    loadSvg(text);
+  }
+});
+
+svgText.addEventListener('input', () => {
+  const val = svgText.value.trim();
+  if(val && isLikelySvg(val)){
+    currentSvgString = val;
+    previewImg.innerHTML = val;
+    previewBar.classList.remove('hidden');
+    generateBtn.disabled = false;
+    setStatus('SVG loaded. Ready to generate.', 'ok');
+  } else {
+    generateBtn.disabled = true;
+  }
+});
+
+clearBtn.addEventListener('click', () => {
+  currentSvgString = null;
+  svgText.value = '';
+  previewImg.innerHTML = '';
+  previewBar.classList.add('hidden');
+  generateBtn.disabled = true;
+  resultsCard.classList.add('hidden');
+  headerCard.classList.add('hidden');
+  grid.innerHTML = '';
+  generatedPngs = [];
+  setStatus('');
+});
+
+function rasterize(svgString, size){
+  return new Promise((resolve, reject) => {
+    const svgBlob = new Blob([svgString], {type:'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(svgBlob);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,size,size);
+      ctx.drawImage(img, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      canvas.toBlob((blob) => {
+        resolve({canvas, blob, dataUrl: canvas.toDataURL('image/png')});
+      }, 'image/png');
+    };
+    img.onerror = (err) => { URL.revokeObjectURL(url); reject(err); };
+    img.src = url;
+  });
+}
+
+generateBtn.addEventListener('click', async () => {
+  if(!currentSvgString) return;
+  setStatus('Rendering all sizes...', '');
+  grid.innerHTML = '';
+  generatedPngs = [];
+  resultsCard.classList.remove('hidden');
+  headerCard.classList.remove('hidden');
+
+  for(const [filename, size, desc] of SIZES){
+    try{
+      const {canvas, blob, dataUrl} = await rasterize(currentSvgString, size);
+      generatedPngs.push({filename, size, blob, dataUrl});
+
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const smallCanvas = document.createElement('canvas');
+      smallCanvas.width = size; smallCanvas.height = size;
+      smallCanvas.getContext('2d').drawImage(canvas, 0, 0);
+      cell.appendChild(smallCanvas);
+      const label = document.createElement('b');
+      label.textContent = size + '×' + size;
+      cell.appendChild(label);
+      const sub = document.createElement('div');
+      sub.textContent = desc;
+      cell.appendChild(sub);
+      grid.appendChild(cell);
+    } catch(err){
+      console.error('Failed to rasterize', size, err);
+    }
+  }
+
+  setStatus('Generated ' + generatedPngs.length + ' PNG sizes.', 'ok');
+  updateHeadSnippet();
+});
+
+function updateHeadSnippet(){
+  const folder = folderPathInput.value.trim().replace(/^\/+/, '').replace(/\/*$/, '/');
+  const lines = [];
+  lines.push('<!-- iOS Home Screen / Touch Icons -->');
+  for(const [filename, size] of SIZES){
+    if(size === 1024) continue; // App Store icon isn't referenced via <link>, skip in head
+    lines.push(`<link rel="apple-touch-icon" sizes="${size}x${size}" href="${folder}${filename}">`);
+  }
+  lines.push('<link rel="apple-touch-icon" href="' + folder + 'apple-touch-icon-180x180.png">');
+  lines.push('<meta name="apple-mobile-web-app-capable" content="yes">');
+  lines.push('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">');
+  headSnippet.textContent = lines.join('\n');
+}
+
+folderPathInput.addEventListener('input', updateHeadSnippet);
+
+document.getElementById('copyHead').addEventListener('click', () => {
+  navigator.clipboard.writeText(headSnippet.textContent).then(() => {
+    const btn = document.getElementById('copyHead');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = orig, 1500);
+  });
+});
+
+document.getElementById('downloadZip').addEventListener('click', async () => {
+  if(generatedPngs.length === 0) return;
+  zipStatus.textContent = 'Zipping...';
+  try{
+    const zip = new JSZip();
+    const folder = zip.folder('Icons');
+    for(const {filename, blob} of generatedPngs){
+      folder.file(filename, blob);
+    }
+    const folderPath = folderPathInput.value.trim().replace(/^\/+/, '').replace(/\/*$/, '/');
+    const headContent = headSnippet.textContent;
+    zip.file('head-snippet.html', headContent);
+    const content = await zip.generateAsync({type:'blob'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = 'ios-icons.zip';
+    a.click();
+    zipStatus.textContent = 'Downloaded ios-icons.zip';
+  } catch(err){
+    console.error(err);
+    zipStatus.textContent = 'Zip failed — see console.';
+  }
+});
+</script>
+</body>
+</html>
