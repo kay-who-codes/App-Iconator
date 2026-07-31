@@ -324,6 +324,11 @@ generateBtn.addEventListener('click', async () => {
     for(const [filename, size, desc] of list){
       try{
         const {canvas, blob, dataUrl} = await rasterize(currentSvgString, size);
+        if(!blob){
+          console.error('No image data produced for', filename, '— the SVG may reference external/cross-origin content that taints the canvas.');
+          setStatus('Warning: ' + filename + ' failed to render (possibly a cross-origin reference in the SVG). Check console.', 'err');
+          continue;
+        }
         generatedFiles.push({filename, size, blob, dataUrl, required});
         if(size === 16 || size === 32) icoSourcePngs.push({size, blob});
 
@@ -425,18 +430,60 @@ document.getElementById('downloadZip').addEventListener('click', async () => {
     // Pack files directly under AppFiles/Icons/ so the zip can be extracted
     // straight into the app's project root.
     const folder = zip.folder('AppFiles').folder('Icons');
-    for(const {filename, blob} of generatedFiles){
-      folder.file(filename, blob);
+
+    let added = 0;
+    const failed = [];
+
+    for(const item of generatedFiles){
+      const { filename, blob } = item;
+      if(!blob){
+        failed.push(filename + ' (no image data)');
+        continue;
+      }
+      try{
+        // Convert to ArrayBuffer explicitly rather than handing JSZip the
+        // Blob directly — more reliable across browsers than relying on
+        // JSZip's internal Blob handling.
+        const buf = await blob.arrayBuffer();
+        if(!buf || buf.byteLength === 0){
+          failed.push(filename + ' (empty file)');
+          continue;
+        }
+        folder.file(filename, buf);
+        added++;
+      } catch(itemErr){
+        console.error('Failed to add', filename, itemErr);
+        failed.push(filename);
+      }
     }
+
     zip.file('head-snippet.html', headSnippet.textContent);
+
+    if(added === 0){
+      zipStatus.textContent = 'Nothing to zip — all files failed to generate. Try Generate Icons again.';
+      zipStatus.className = 'status err';
+      return;
+    }
+
     const content = await zip.generateAsync({type:'blob'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(content);
     a.download = 'AppFiles-Icons.zip';
+    document.body.appendChild(a);
     a.click();
-    zipStatus.textContent = 'Downloaded AppFiles-Icons.zip — unzip into your app\'s project root.';
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+
+    if(failed.length){
+      zipStatus.className = 'status err';
+      zipStatus.textContent = `Downloaded ${added} file(s). Skipped: ${failed.join(', ')} — see console.`;
+    } else {
+      zipStatus.className = 'status ok';
+      zipStatus.textContent = `Downloaded AppFiles-Icons.zip with ${added} file(s) — unzip into your app's project root.`;
+    }
   } catch(err){
     console.error(err);
+    zipStatus.className = 'status err';
     zipStatus.textContent = 'Zip failed — see console.';
   }
 });
