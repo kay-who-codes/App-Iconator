@@ -23,6 +23,11 @@
     background:var(--panel); border:1px solid var(--border); border-radius:14px;
     padding:20px; margin-bottom:20px;
   }
+  .badge{
+    display:inline-block; font-size:.72rem; color:var(--accent2);
+    background:#132420; border:1px solid #234a3d; padding:3px 9px;
+    border-radius:20px; margin-bottom:14px;
+  }
   .drop{
     border:2px dashed var(--border); border-radius:12px; padding:28px;
     text-align:center; cursor:pointer; transition:.15s; position:relative;
@@ -53,17 +58,24 @@
   .status{font-size:.85rem; color:var(--muted);}
   .status.err{color:var(--danger);}
   .status.ok{color:var(--accent2);}
-  h2{font-size:1rem; margin:0 0 12px; color:var(--text);}
+  h2{font-size:1rem; margin:0 0 4px; color:var(--text);}
   .grid{
     display:grid; grid-template-columns:repeat(auto-fill,minmax(74px,1fr));
-    gap:12px; margin-top:6px;
+    gap:12px; margin-top:14px;
   }
+  .grid-label{
+    font-size:.7rem; text-transform:uppercase; letter-spacing:.05em;
+    color:var(--muted); margin-top:18px; margin-bottom:-4px;
+  }
+  .grid-label:first-of-type{margin-top:0;}
   .cell{
     background:var(--panel2); border:1px solid var(--border); border-radius:10px;
     padding:8px; text-align:center; font-size:.65rem; color:var(--muted);
   }
+  .cell.required{border-color:#234a3d;}
   .cell canvas{width:100%; height:auto; background:#fff; border-radius:6px; margin-bottom:6px;}
   .cell b{color:var(--text); display:block; font-size:.68rem;}
+  .cell .fname{color:var(--accent2); font-size:.62rem; word-break:break-all;}
   pre{
     background:var(--panel2); border:1px solid var(--border); border-radius:10px;
     padding:14px; font-size:.78rem; overflow-x:auto; line-height:1.55;
@@ -78,7 +90,8 @@
 <body>
 <div class="wrap">
   <h1>iOS App Icon Generator</h1>
-  <p class="sub">Upload or paste an SVG. Get every iOS icon PNG size, packaged and ready, plus the &lt;link&gt; tags for your index.html.</p>
+  <p class="sub">Upload or paste an SVG. Get every icon file your app needs — favicon.ico, favicons, and the iPhone home-screen icon — packaged as a zip that drops straight into <code>AppFiles/Icons/</code>.</p>
+  <div class="badge">Outputs match the Icon Injector app's expected filenames</div>
 
   <div class="card">
     <div class="drop" id="drop">
@@ -99,17 +112,21 @@
   </div>
 
   <div class="card hidden" id="resultsCard">
-    <h2>Generated Sizes</h2>
-    <div class="grid" id="grid"></div>
+    <h2>Generated Files</h2>
+    <p class="folder-note">These are exactly the files the Icon Injector app looks for — no renaming needed.</p>
+    <div id="requiredLabel" class="grid-label">Required</div>
+    <div class="grid" id="gridRequired"></div>
+    <div id="extraLabel" class="grid-label">Extra (iPad, larger sizes — optional)</div>
+    <div class="grid" id="gridExtra"></div>
     <div class="row">
-      <button id="downloadZip">Download all as .zip</button>
+      <button id="downloadZip">Download AppFiles/Icons.zip</button>
       <span class="status" id="zipStatus"></span>
     </div>
   </div>
 
   <div class="card hidden" id="headerCard">
     <h2>HTML &lt;head&gt; snippet <button class="secondary copybtn" id="copyHead">Copy</button></h2>
-    <p class="folder-note">Assumes PNGs are placed in <code>AppFiles/Icons/</code> relative to your index.html. Change the path below if needed, then re-copy.</p>
+    <p class="folder-note">Same tags the Icon Injector app inserts — paste straight into &lt;head&gt;, or just run the updated app through Icon Injector instead.</p>
     <div class="row" style="margin-top:0;">
       <label class="status">Folder path: <input id="folderPath" value="AppFiles/Icons/" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:ui-monospace,monospace;font-size:.8rem;"></label>
     </div>
@@ -118,9 +135,16 @@
 </div>
 
 <script>
-// iOS icon spec: [filename, pixel size, description]
-const SIZES = [
-  ["apple-touch-icon-180x180.png", 180, "iPhone Home @3x"],
+// Required — these filenames are exactly what the Icon Injector app references.
+const REQUIRED_SIZES = [
+  ["favicon-16x16.png", 16, "Browser tab (small)"],
+  ["favicon-32x32.png", 32, "Browser tab / bookmark"],
+  ["apple-touch-icon.png", 180, "iPhone Home Screen"],
+];
+// favicon.ico is built separately from the 16 + 32 PNGs (see buildIco below).
+
+// Optional extras — not required by the Icon Injector, but useful for iPad etc.
+const EXTRA_SIZES = [
   ["apple-touch-icon-167x167.png", 167, "iPad Pro Home @2x"],
   ["apple-touch-icon-152x152.png", 152, "iPad Home @2x"],
 ];
@@ -135,13 +159,14 @@ const previewBar = document.getElementById('previewBar');
 const previewImg = document.getElementById('previewImg');
 const resultsCard = document.getElementById('resultsCard');
 const headerCard = document.getElementById('headerCard');
-const grid = document.getElementById('grid');
+const gridRequired = document.getElementById('gridRequired');
+const gridExtra = document.getElementById('gridExtra');
 const zipStatus = document.getElementById('zipStatus');
 const folderPathInput = document.getElementById('folderPath');
 const headSnippet = document.getElementById('headSnippet');
 
 let currentSvgString = null;
-let generatedPngs = []; // {filename, size, blob, dataUrl}
+let generatedFiles = []; // {filename, size, blob, dataUrl, required}
 
 function setStatus(msg, type){
   statusEl.textContent = msg || '';
@@ -216,8 +241,9 @@ clearBtn.addEventListener('click', () => {
   generateBtn.disabled = true;
   resultsCard.classList.add('hidden');
   headerCard.classList.add('hidden');
-  grid.innerHTML = '';
-  generatedPngs = [];
+  gridRequired.innerHTML = '';
+  gridExtra.innerHTML = '';
+  generatedFiles = [];
   setStatus('');
 });
 
@@ -243,52 +269,140 @@ function rasterize(svgString, size){
   });
 }
 
+// Builds a valid .ico file by embedding PNG data directly in an ICO container
+// (supported by all modern browsers/OSes, including favicon usage).
+async function buildIco(pngEntries){
+  // pngEntries: [{size, blob}]
+  const buffers = await Promise.all(pngEntries.map(e => e.blob.arrayBuffer()));
+  const count = buffers.length;
+  const headerSize = 6 + 16 * count;
+  let totalSize = headerSize;
+  buffers.forEach(b => totalSize += b.byteLength);
+
+  const out = new Uint8Array(totalSize);
+  const view = new DataView(out.buffer);
+
+  // ICONDIR
+  view.setUint16(0, 0, true);      // reserved
+  view.setUint16(2, 1, true);      // type: 1 = icon
+  view.setUint16(4, count, true);  // image count
+
+  let offset = headerSize;
+  for(let i = 0; i < count; i++){
+    const { size } = pngEntries[i];
+    const buf = buffers[i];
+    const entryOffset = 6 + i * 16;
+    const dim = size >= 256 ? 0 : size; // 0 means 256
+    out[entryOffset + 0] = dim;          // width
+    out[entryOffset + 1] = dim;          // height
+    out[entryOffset + 2] = 0;            // color count
+    out[entryOffset + 3] = 0;            // reserved
+    view.setUint16(entryOffset + 4, 1, true);   // planes
+    view.setUint16(entryOffset + 6, 32, true);  // bit count
+    view.setUint32(entryOffset + 8, buf.byteLength, true); // bytes in resource
+    view.setUint32(entryOffset + 12, offset, true);        // image offset
+
+    out.set(new Uint8Array(buf), offset);
+    offset += buf.byteLength;
+  }
+
+  return new Blob([out], { type: 'image/x-icon' });
+}
+
 generateBtn.addEventListener('click', async () => {
   if(!currentSvgString) return;
   setStatus('Rendering all sizes...', '');
-  grid.innerHTML = '';
-  generatedPngs = [];
+  gridRequired.innerHTML = '';
+  gridExtra.innerHTML = '';
+  generatedFiles = [];
   resultsCard.classList.remove('hidden');
   headerCard.classList.remove('hidden');
 
-  for(const [filename, size, desc] of SIZES){
-    try{
-      const {canvas, blob, dataUrl} = await rasterize(currentSvgString, size);
-      generatedPngs.push({filename, size, blob, dataUrl});
+  const icoSourcePngs = []; // {size, blob} for 16 and 32, used to build favicon.ico
 
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      const smallCanvas = document.createElement('canvas');
-      smallCanvas.width = size; smallCanvas.height = size;
-      smallCanvas.getContext('2d').drawImage(canvas, 0, 0);
-      cell.appendChild(smallCanvas);
-      const label = document.createElement('b');
-      label.textContent = size + '×' + size;
-      cell.appendChild(label);
-      const sub = document.createElement('div');
-      sub.textContent = desc;
-      cell.appendChild(sub);
-      grid.appendChild(cell);
-    } catch(err){
-      console.error('Failed to rasterize', size, err);
+  async function renderInto(list, gridEl, required){
+    for(const [filename, size, desc] of list){
+      try{
+        const {canvas, blob, dataUrl} = await rasterize(currentSvgString, size);
+        generatedFiles.push({filename, size, blob, dataUrl, required});
+        if(size === 16 || size === 32) icoSourcePngs.push({size, blob});
+
+        const cell = document.createElement('div');
+        cell.className = 'cell' + (required ? ' required' : '');
+        const smallCanvas = document.createElement('canvas');
+        smallCanvas.width = size; smallCanvas.height = size;
+        smallCanvas.getContext('2d').drawImage(canvas, 0, 0);
+        cell.appendChild(smallCanvas);
+        const label = document.createElement('b');
+        label.textContent = size + '×' + size;
+        cell.appendChild(label);
+        const fname = document.createElement('div');
+        fname.className = 'fname';
+        fname.textContent = filename;
+        cell.appendChild(fname);
+        const sub = document.createElement('div');
+        sub.textContent = desc;
+        cell.appendChild(sub);
+        gridEl.appendChild(cell);
+      } catch(err){
+        console.error('Failed to rasterize', size, err);
+      }
     }
   }
 
-  setStatus('Generated ' + generatedPngs.length + ' PNG sizes.', 'ok');
+  await renderInto(REQUIRED_SIZES, gridRequired, true);
+  await renderInto(EXTRA_SIZES, gridExtra, false);
+
+  // Build favicon.ico from the 16 and 32 px PNGs
+  try{
+    const icoBlob = await buildIco(icoSourcePngs.sort((a,b) => a.size - b.size));
+    generatedFiles.push({filename: 'favicon.ico', size: null, blob: icoBlob, dataUrl: null, required: true});
+
+    const cell = document.createElement('div');
+    cell.className = 'cell required';
+    const icoImg = document.createElement('canvas');
+    icoImg.width = 32; icoImg.height = 32;
+    const ctx = icoImg.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0,0,32,32);
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = '#333';
+    ctx.textAlign = 'center';
+    ctx.fillText('.ico', 16, 20);
+    icoImg.style.width = '100%';
+    cell.appendChild(icoImg);
+    const label = document.createElement('b');
+    label.textContent = '16 & 32 combined';
+    cell.appendChild(label);
+    const fname = document.createElement('div');
+    fname.className = 'fname';
+    fname.textContent = 'favicon.ico';
+    cell.appendChild(fname);
+    const sub = document.createElement('div');
+    sub.textContent = 'Legacy browser tab icon';
+    cell.appendChild(sub);
+    gridRequired.insertBefore(cell, gridRequired.firstChild);
+  } catch(err){
+    console.error('Failed to build favicon.ico', err);
+  }
+
+  setStatus('Generated ' + generatedFiles.length + ' files.', 'ok');
   updateHeadSnippet();
 });
 
 function updateHeadSnippet(){
   const folder = folderPathInput.value.trim().replace(/^\/+/, '').replace(/\/*$/, '/');
-  const lines = [];
-  lines.push('<!-- iOS Home Screen / Touch Icons -->');
-  for(const [filename, size] of SIZES){
-    if(size === 1024) continue; // App Store icon isn't referenced via <link>, skip in head
-    lines.push(`<link rel="apple-touch-icon" sizes="${size}x${size}" href="${folder}${filename}">`);
-  }
-  lines.push('<link rel="apple-touch-icon" href="' + folder + 'apple-touch-icon-180x180.png">');
-  lines.push('<meta name="apple-mobile-web-app-capable" content="yes">');
-  lines.push('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">');
+  const lines = [
+    '<!-- App icons -->',
+    `<link rel="icon" type="image/x-icon" href="${folder}favicon.ico">`,
+    `<link rel="icon" type="image/png" sizes="32x32" href="${folder}favicon-32x32.png">`,
+    `<link rel="icon" type="image/png" sizes="16x16" href="${folder}favicon-16x16.png">`,
+    `<link rel="apple-touch-icon" sizes="180x180" href="${folder}apple-touch-icon.png">`,
+    '<meta name="apple-mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
+    '<meta name="theme-color" content="#0d1210">',
+    '<!-- End app icons -->',
+  ];
   headSnippet.textContent = lines.join('\n');
 }
 
@@ -304,23 +418,23 @@ document.getElementById('copyHead').addEventListener('click', () => {
 });
 
 document.getElementById('downloadZip').addEventListener('click', async () => {
-  if(generatedPngs.length === 0) return;
+  if(generatedFiles.length === 0) return;
   zipStatus.textContent = 'Zipping...';
   try{
     const zip = new JSZip();
-    const folder = zip.folder('Icons');
-    for(const {filename, blob} of generatedPngs){
+    // Pack files directly under AppFiles/Icons/ so the zip can be extracted
+    // straight into the app's project root.
+    const folder = zip.folder('AppFiles').folder('Icons');
+    for(const {filename, blob} of generatedFiles){
       folder.file(filename, blob);
     }
-    const folderPath = folderPathInput.value.trim().replace(/^\/+/, '').replace(/\/*$/, '/');
-    const headContent = headSnippet.textContent;
-    zip.file('head-snippet.html', headContent);
+    zip.file('head-snippet.html', headSnippet.textContent);
     const content = await zip.generateAsync({type:'blob'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(content);
-    a.download = 'ios-icons.zip';
+    a.download = 'AppFiles-Icons.zip';
     a.click();
-    zipStatus.textContent = 'Downloaded ios-icons.zip';
+    zipStatus.textContent = 'Downloaded AppFiles-Icons.zip — unzip into your app\'s project root.';
   } catch(err){
     console.error(err);
     zipStatus.textContent = 'Zip failed — see console.';
