@@ -247,10 +247,52 @@ clearBtn.addEventListener('click', () => {
   setStatus('');
 });
 
+// Some SVGs fail to rasterize via blob: URLs (browser-dependent quirk),
+// and browsers can refuse to size an <img> that has no explicit
+// width/height (only a viewBox). Normalize before rendering.
+function sanitizeSvg(svgString){
+  let svg = svgString.trim();
+
+  // Ensure the SVG namespace is present — missing xmlns is a common
+  // reason browsers refuse to decode an SVG passed to <img>.
+  if(!/xmlns\s*=\s*["']http:\/\/www\.w3\.org\/2000\/svg["']/.test(svg)){
+    svg = svg.replace(/<svg/i, '<svg xmlns="http://www.w3.org/2000/svg"');
+  }
+
+  // If there's no explicit width/height, derive square dimensions from
+  // the viewBox so the browser knows the intrinsic size to rasterize at.
+  const hasWidth = /<svg[^>]*\swidth\s*=/i.test(svg);
+  const hasHeight = /<svg[^>]*\sheight\s*=/i.test(svg);
+  if(!hasWidth || !hasHeight){
+    const viewBoxMatch = svg.match(/viewBox\s*=\s*["']\s*([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s+([\d.\-]+)\s*["']/i);
+    let w = 512, h = 512;
+    if(viewBoxMatch){
+      w = parseFloat(viewBoxMatch[3]);
+      h = parseFloat(viewBoxMatch[4]);
+    }
+    svg = svg.replace(/<svg/i, `<svg width="${w}" height="${h}"`);
+  }
+
+  // Strip <script> tags — scripted SVGs are treated as "active content"
+  // and some browsers refuse to render them at all inside an <img>.
+  svg = svg.replace(/<script[\s\S]*?<\/script>/gi, '');
+
+  return svg;
+}
+
+function svgToDataUri(svgString){
+  // Data URIs load far more reliably than blob: URLs for SVG-to-canvas
+  // rasterization across browsers.
+  const encoded = encodeURIComponent(svgString)
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29');
+  return 'data:image/svg+xml;charset=utf-8,' + encoded;
+}
+
 function rasterize(svgString, size){
   return new Promise((resolve, reject) => {
-    const svgBlob = new Blob([svgString], {type:'image/svg+xml;charset=utf-8'});
-    const url = URL.createObjectURL(svgBlob);
+    const clean = sanitizeSvg(svgString);
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
@@ -258,14 +300,18 @@ function rasterize(svgString, size){
       canvas.height = size;
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0,0,size,size);
-      ctx.drawImage(img, 0, 0, size, size);
-      URL.revokeObjectURL(url);
+      try{
+        ctx.drawImage(img, 0, 0, size, size);
+      } catch(drawErr){
+        reject(drawErr);
+        return;
+      }
       canvas.toBlob((blob) => {
         resolve({canvas, blob, dataUrl: canvas.toDataURL('image/png')});
       }, 'image/png');
     };
-    img.onerror = (err) => { URL.revokeObjectURL(url); reject(err); };
-    img.src = url;
+    img.onerror = (err) => reject(err);
+    img.src = svgToDataUri(clean);
   });
 }
 
@@ -351,6 +397,7 @@ generateBtn.addEventListener('click', async () => {
         gridEl.appendChild(cell);
       } catch(err){
         console.error('Failed to rasterize', size, err);
+        setStatus('Warning: ' + filename + ' failed to render (' + (err && err.message ? err.message : 'invalid or unsupported SVG') + '). Check console.', 'err');
       }
     }
   }
