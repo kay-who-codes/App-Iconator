@@ -174,7 +174,27 @@ function setStatus(msg, type){
 }
 
 function isLikelySvg(str){
-  return /<svg[\s\S]*<\/svg>/i.test(str);
+  return /<svg[\s\S]*?<\/svg>/i.test(str);
+}
+
+// Pull out just the first <svg>...</svg> block. Handles the common case
+// of someone pasting two SVGs back to back, which is invalid XML (two
+// root elements) and fails as an opaque decode error otherwise.
+function extractFirstSvg(str){
+  const match = str.match(/<svg[\s\S]*?<\/svg>/i);
+  return match ? match[0] : null;
+}
+
+// Parse with the browser's real XML parser so malformed SVGs produce a
+// clear message instead of a silent <img> decode failure later.
+function validateSvg(svgString){
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgString, 'image/svg+xml');
+  const errorNode = doc.querySelector('parsererror');
+  if(errorNode){
+    return { ok: false, message: errorNode.textContent.replace(/\s+/g, ' ').trim().slice(0, 200) };
+  }
+  return { ok: true };
 }
 
 function loadSvg(str){
@@ -184,12 +204,29 @@ function loadSvg(str){
     previewBar.classList.add('hidden');
     return;
   }
-  currentSvgString = str;
-  svgText.value = str;
-  previewImg.innerHTML = str;
+
+  const extracted = extractFirstSvg(str);
+  const hadExtra = extracted && str.trim() !== extracted.trim();
+
+  const check = validateSvg(extracted);
+  if(!check.ok){
+    setStatus('Invalid SVG: ' + check.message, 'err');
+    generateBtn.disabled = true;
+    previewBar.classList.add('hidden');
+    return;
+  }
+
+  currentSvgString = extracted;
+  svgText.value = extracted;
+  previewImg.innerHTML = extracted;
   previewBar.classList.remove('hidden');
   generateBtn.disabled = false;
-  setStatus('SVG loaded. Ready to generate.', 'ok');
+
+  if(hadExtra){
+    setStatus('Found more than one SVG block — using just the first one. Ready to generate.', 'ok');
+  } else {
+    setStatus('SVG loaded. Ready to generate.', 'ok');
+  }
 }
 
 fileInput.addEventListener('change', (e) => {
@@ -223,11 +260,19 @@ document.addEventListener('paste', (e) => {
 svgText.addEventListener('input', () => {
   const val = svgText.value.trim();
   if(val && isLikelySvg(val)){
-    currentSvgString = val;
-    previewImg.innerHTML = val;
+    const extracted = extractFirstSvg(val);
+    const check = validateSvg(extracted);
+    if(!check.ok){
+      generateBtn.disabled = true;
+      setStatus('Invalid SVG: ' + check.message, 'err');
+      return;
+    }
+    currentSvgString = extracted;
+    previewImg.innerHTML = extracted;
     previewBar.classList.remove('hidden');
     generateBtn.disabled = false;
-    setStatus('SVG loaded. Ready to generate.', 'ok');
+    const hadExtra = val !== extracted.trim();
+    setStatus(hadExtra ? 'Found more than one SVG block — using just the first one. Ready to generate.' : 'SVG loaded. Ready to generate.', 'ok');
   } else {
     generateBtn.disabled = true;
   }
