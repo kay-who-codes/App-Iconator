@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>iOS Icon Generator</title>
+<title>⭐ App Iconator</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
@@ -26,8 +26,14 @@
   .badge{
     display:inline-block; font-size:.72rem; color:var(--accent2);
     background:#132420; border:1px solid #234a3d; padding:3px 9px;
-    border-radius:20px; margin-bottom:14px;
+    border-radius:20px; margin-bottom:14px; margin-right:8px;
   }
+  .tabs{display:flex; gap:8px; margin-bottom:16px;}
+  .tab{
+    padding:8px 16px; border-radius:8px; cursor:pointer; font-size:.85rem;
+    background:var(--panel2); border:1px solid var(--border); color:var(--muted);
+  }
+  .tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
   .drop{
     border:2px dashed var(--border); border-radius:12px; padding:28px;
     text-align:center; cursor:pointer; transition:.15s; position:relative;
@@ -54,6 +60,7 @@
   .preview-bar{display:flex; align-items:center; gap:16px; margin-top:14px;}
   .preview-bar img, .preview-bar svg{
     width:64px; height:64px; background:#fff; border-radius:12px; padding:6px;
+    object-fit:contain;
   }
   .status{font-size:.85rem; color:var(--muted);}
   .status.err{color:var(--danger);}
@@ -89,17 +96,35 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>iOS App Icon Generator</h1>
-  <p class="sub">Upload or paste an SVG. Get every icon file your app needs — favicon.ico, favicons, and the iPhone home-screen icon — packaged as a zip that drops straight into <code>AppFiles/Icons/</code>.</p>
-  <div class="badge">Outputs match the Icon Injector app's expected filenames</div>
+  <h1>App Iconator</h1>
+  <p class="sub">Upload or paste an SVG, or upload a PNG/JPG image. Get every icon file your app needs — favicon.ico, favicons, iPhone home-screen icon, and 192px/512px app icons — packaged as a zip that drops straight into your project.</p>
+  <div class="badge">Icons/ → matches Icon Injector filenames</div>
+  <div class="badge">Logos/ → 192px &amp; 512px app icons</div>
 
   <div class="card">
-    <div class="drop" id="drop">
-      <strong>Click, drag & drop, or paste an SVG</strong>
-      <p>Accepts .svg files, or Ctrl/Cmd+V pasted SVG markup anywhere on the page</p>
-      <input type="file" id="fileInput" accept=".svg,image/svg+xml">
+    <div class="tabs">
+      <div class="tab active" id="tabSvg">SVG</div>
+      <div class="tab" id="tabImg">PNG / JPG</div>
     </div>
-    <textarea id="svgText" placeholder="...or paste raw SVG markup here"></textarea>
+
+    <div id="svgPane">
+      <div class="drop" id="drop">
+        <strong>Click, drag & drop, or paste an SVG</strong>
+        <p>Accepts .svg files, or Ctrl/Cmd+V pasted SVG markup anywhere on the page</p>
+        <input type="file" id="fileInput" accept=".svg,image/svg+xml">
+      </div>
+      <textarea id="svgText" placeholder="...or paste raw SVG markup here"></textarea>
+    </div>
+
+    <div id="imgPane" class="hidden">
+      <div class="drop" id="dropImg">
+        <strong>Click, drag & drop, or paste a PNG/JPG image</strong>
+        <p>Accepts .png, .jpg, .jpeg, .webp files, or Ctrl/Cmd+V a copied image</p>
+        <input type="file" id="imgFileInput" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp">
+      </div>
+      <p class="folder-note">Non-square images are center-cropped to a square before resizing, so a roughly square source (ideally 512×512 or larger) gives the cleanest result.</p>
+    </div>
+
     <div class="row">
       <button id="generateBtn" disabled>Generate Icons</button>
       <button class="secondary" id="clearBtn">Clear</button>
@@ -107,28 +132,31 @@
     </div>
     <div class="preview-bar hidden" id="previewBar">
       <div id="previewImg"></div>
-      <span class="status">Preview — this is what will be rasterized (square-cropped to the SVG's viewBox)</span>
+      <span class="status" id="previewLabel">Preview — this is what will be rasterized (square-cropped)</span>
     </div>
   </div>
 
   <div class="card hidden" id="resultsCard">
     <h2>Generated Files</h2>
-    <p class="folder-note">These are exactly the files the Icon Injector app looks for — no renaming needed.</p>
-    <div id="requiredLabel" class="grid-label">Required</div>
+    <p class="folder-note">These are exactly the files your app looks for — no renaming needed.</p>
+    <div id="requiredLabel" class="grid-label">AppFiles/Icons/ — Required</div>
     <div class="grid" id="gridRequired"></div>
-    <div id="extraLabel" class="grid-label">Extra (iPad, larger sizes — optional)</div>
+    <div id="logosLabel" class="grid-label">AppFiles/Logos/ — App Icons</div>
+    <div class="grid" id="gridLogos"></div>
+    <div id="extraLabel" class="grid-label">AppFiles/Icons/ — Extra (iPad, larger sizes — optional)</div>
     <div class="grid" id="gridExtra"></div>
     <div class="row">
-      <button id="downloadZip">Download AppFiles/Icons.zip</button>
+      <button id="downloadZip">Download AppFiles.zip</button>
       <span class="status" id="zipStatus"></span>
     </div>
   </div>
 
   <div class="card hidden" id="headerCard">
     <h2>HTML &lt;head&gt; snippet <button class="secondary copybtn" id="copyHead">Copy</button></h2>
-    <p class="folder-note">Same tags the Icon Injector app inserts — paste straight into &lt;head&gt;, or just run the updated app through Icon Injector instead.</p>
+    <p class="folder-note">Paste straight into your app's &lt;head&gt; to wire up the newly generated icons — includes both the favicon set and the 192px/512px app icons.</p>
     <div class="row" style="margin-top:0;">
-      <label class="status">Folder path: <input id="folderPath" value="AppFiles/Icons/" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:ui-monospace,monospace;font-size:.8rem;"></label>
+      <label class="status">Icons folder: <input id="folderPath" value="AppFiles/Icons/" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:ui-monospace,monospace;font-size:.8rem;"></label>
+      <label class="status">Logos folder: <input id="logosFolderPath" value="AppFiles/Logos/" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-family:ui-monospace,monospace;font-size:.8rem;"></label>
     </div>
     <pre id="headSnippet"></pre>
   </div>
@@ -149,29 +177,63 @@ const EXTRA_SIZES = [
   ["apple-touch-icon-152x152.png", 152, "iPad Home @2x"],
 ];
 
+// New: app icon PNGs that go into AppFiles/Logos/
+const LOGO_SIZES = [
+  ["AppIcon192px.png", 192, "PWA / Android icon"],
+  ["AppIcon512px.png", 512, "PWA / splash / store icon"],
+];
+
+const tabSvg = document.getElementById('tabSvg');
+const tabImg = document.getElementById('tabImg');
+const svgPane = document.getElementById('svgPane');
+const imgPane = document.getElementById('imgPane');
+
 const drop = document.getElementById('drop');
 const fileInput = document.getElementById('fileInput');
 const svgText = document.getElementById('svgText');
+
+const dropImg = document.getElementById('dropImg');
+const imgFileInput = document.getElementById('imgFileInput');
+
 const generateBtn = document.getElementById('generateBtn');
 const clearBtn = document.getElementById('clearBtn');
 const statusEl = document.getElementById('status');
 const previewBar = document.getElementById('previewBar');
 const previewImg = document.getElementById('previewImg');
+const previewLabel = document.getElementById('previewLabel');
 const resultsCard = document.getElementById('resultsCard');
 const headerCard = document.getElementById('headerCard');
 const gridRequired = document.getElementById('gridRequired');
 const gridExtra = document.getElementById('gridExtra');
+const gridLogos = document.getElementById('gridLogos');
 const zipStatus = document.getElementById('zipStatus');
 const folderPathInput = document.getElementById('folderPath');
+const logosFolderPathInput = document.getElementById('logosFolderPath');
 const headSnippet = document.getElementById('headSnippet');
 
-let currentSvgString = null;
-let generatedFiles = []; // {filename, size, blob, dataUrl, required}
+// currentSource: { type: 'svg', value: string } | { type: 'image', value: HTMLImageElement }
+let currentSource = null;
+let generatedFiles = []; // {filename, size, blob, dataUrl, required, folder}
 
 function setStatus(msg, type){
   statusEl.textContent = msg || '';
   statusEl.className = 'status' + (type ? ' ' + type : '');
 }
+
+function switchTab(which){
+  const toSvg = which === 'svg';
+  tabSvg.classList.toggle('active', toSvg);
+  tabImg.classList.toggle('active', !toSvg);
+  svgPane.classList.toggle('hidden', !toSvg);
+  imgPane.classList.toggle('hidden', toSvg);
+  // Reset current selection when switching modes to avoid mixing sources
+  currentSource = null;
+  generateBtn.disabled = true;
+  previewBar.classList.add('hidden');
+  setStatus('');
+}
+tabSvg.addEventListener('click', () => switchTab('svg'));
+tabImg.addEventListener('click', () => switchTab('img'));
 
 function isLikelySvg(str){
   return /<svg[\s\S]*?<\/svg>/i.test(str);
@@ -216,9 +278,10 @@ function loadSvg(str){
     return;
   }
 
-  currentSvgString = extracted;
+  currentSource = { type: 'svg', value: extracted };
   svgText.value = extracted;
   previewImg.innerHTML = extracted;
+  previewLabel.textContent = 'Preview — this is what will be rasterized (square-cropped to the SVG\'s viewBox)';
   previewBar.classList.remove('hidden');
   generateBtn.disabled = false;
 
@@ -227,6 +290,40 @@ function loadSvg(str){
   } else {
     setStatus('SVG loaded. Ready to generate.', 'ok');
   }
+}
+
+function loadImageFile(file){
+  if(!file){
+    return;
+  }
+  if(!/^image\/(png|jpeg|jpg|webp)$/.test(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name || '')){
+    setStatus('That doesn\'t look like a PNG, JPG, or WEBP image.', 'err');
+    generateBtn.disabled = true;
+    previewBar.classList.add('hidden');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      currentSource = { type: 'image', value: img };
+      previewImg.innerHTML = '';
+      const previewEl = document.createElement('img');
+      previewEl.src = reader.result;
+      previewImg.appendChild(previewEl);
+      previewLabel.textContent = `Preview — ${img.naturalWidth}×${img.naturalHeight}px source, will be center-cropped to a square and resized`;
+      previewBar.classList.remove('hidden');
+      generateBtn.disabled = false;
+      setStatus('Image loaded. Ready to generate.', 'ok');
+    };
+    img.onerror = () => {
+      setStatus('Could not decode that image file.', 'err');
+      generateBtn.disabled = true;
+    };
+    img.src = reader.result;
+  };
+  reader.onerror = () => setStatus('Could not read that file.', 'err');
+  reader.readAsDataURL(file);
 }
 
 fileInput.addEventListener('change', (e) => {
@@ -250,9 +347,41 @@ drop.addEventListener('drop', (e) => {
   reader.readAsText(f);
 });
 
+imgFileInput.addEventListener('change', (e) => {
+  loadImageFile(e.target.files[0]);
+});
+
+dropImg.addEventListener('click', () => imgFileInput.click());
+dropImg.addEventListener('dragover', (e) => { e.preventDefault(); dropImg.classList.add('drag'); });
+dropImg.addEventListener('dragleave', () => dropImg.classList.remove('drag'));
+dropImg.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropImg.classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if(!f) return;
+  loadImageFile(f);
+});
+
 document.addEventListener('paste', (e) => {
-  const text = (e.clipboardData || window.clipboardData).getData('text');
-  if(text && isLikelySvg(text)){
+  const clipboardData = e.clipboardData || window.clipboardData;
+
+  // If we're on the image tab, prefer an actual pasted image (e.g. copied
+  // from a design tool or the OS clipboard).
+  if(!imgPane.classList.contains('hidden')){
+    const items = clipboardData.items || [];
+    for(const item of items){
+      if(item.type && item.type.startsWith('image/')){
+        const file = item.getAsFile();
+        if(file){
+          loadImageFile(file);
+          return;
+        }
+      }
+    }
+  }
+
+  const text = clipboardData.getData('text');
+  if(text && isLikelySvg(text) && !svgPane.classList.contains('hidden')){
     loadSvg(text);
   }
 });
@@ -267,8 +396,9 @@ svgText.addEventListener('input', () => {
       setStatus('Invalid SVG: ' + check.message, 'err');
       return;
     }
-    currentSvgString = extracted;
+    currentSource = { type: 'svg', value: extracted };
     previewImg.innerHTML = extracted;
+    previewLabel.textContent = 'Preview — this is what will be rasterized (square-cropped to the SVG\'s viewBox)';
     previewBar.classList.remove('hidden');
     generateBtn.disabled = false;
     const hadExtra = val !== extracted.trim();
@@ -279,8 +409,10 @@ svgText.addEventListener('input', () => {
 });
 
 clearBtn.addEventListener('click', () => {
-  currentSvgString = null;
+  currentSource = null;
   svgText.value = '';
+  fileInput.value = '';
+  imgFileInput.value = '';
   previewImg.innerHTML = '';
   previewBar.classList.add('hidden');
   generateBtn.disabled = true;
@@ -288,6 +420,7 @@ clearBtn.addEventListener('click', () => {
   headerCard.classList.add('hidden');
   gridRequired.innerHTML = '';
   gridExtra.innerHTML = '';
+  gridLogos.innerHTML = '';
   generatedFiles = [];
   setStatus('');
 });
@@ -335,7 +468,7 @@ function svgToDataUri(svgString){
   return 'data:image/svg+xml;charset=utf-8,' + encoded;
 }
 
-function rasterize(svgString, size){
+function rasterizeSvg(svgString, size){
   return new Promise((resolve, reject) => {
     const clean = sanitizeSvg(svgString);
     const img = new Image();
@@ -358,6 +491,42 @@ function rasterize(svgString, size){
     img.onerror = (err) => reject(err);
     img.src = svgToDataUri(clean);
   });
+}
+
+// Rasterizes a raster <img> (PNG/JPG/WEBP) into a square PNG at the given
+// size, center-cropping non-square sources so nothing gets stretched.
+function rasterizeImage(imgEl, size){
+  return new Promise((resolve, reject) => {
+    try{
+      const srcW = imgEl.naturalWidth;
+      const srcH = imgEl.naturalHeight;
+      const cropSize = Math.min(srcW, srcH);
+      const sx = (srcW - cropSize) / 2;
+      const sy = (srcH - cropSize) / 2;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0,0,size,size);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(imgEl, sx, sy, cropSize, cropSize, 0, 0, size, size);
+      canvas.toBlob((blob) => {
+        resolve({canvas, blob, dataUrl: canvas.toDataURL('image/png')});
+      }, 'image/png');
+    } catch(err){
+      reject(err);
+    }
+  });
+}
+
+function rasterize(size){
+  if(!currentSource) return Promise.reject(new Error('No source loaded'));
+  if(currentSource.type === 'svg'){
+    return rasterizeSvg(currentSource.value, size);
+  }
+  return rasterizeImage(currentSource.value, size);
 }
 
 // Builds a valid .ico file by embedding PNG data directly in an ICO container
@@ -401,27 +570,28 @@ async function buildIco(pngEntries){
 }
 
 generateBtn.addEventListener('click', async () => {
-  if(!currentSvgString) return;
+  if(!currentSource) return;
   setStatus('Rendering all sizes...', '');
   gridRequired.innerHTML = '';
   gridExtra.innerHTML = '';
+  gridLogos.innerHTML = '';
   generatedFiles = [];
   resultsCard.classList.remove('hidden');
   headerCard.classList.remove('hidden');
 
   const icoSourcePngs = []; // {size, blob} for 16 and 32, used to build favicon.ico
 
-  async function renderInto(list, gridEl, required){
+  async function renderInto(list, gridEl, required, folder){
     for(const [filename, size, desc] of list){
       try{
-        const {canvas, blob, dataUrl} = await rasterize(currentSvgString, size);
+        const {canvas, blob, dataUrl} = await rasterize(size);
         if(!blob){
-          console.error('No image data produced for', filename, '— the SVG may reference external/cross-origin content that taints the canvas.');
-          setStatus('Warning: ' + filename + ' failed to render (possibly a cross-origin reference in the SVG). Check console.', 'err');
+          console.error('No image data produced for', filename, '— the source may reference external/cross-origin content that taints the canvas.');
+          setStatus('Warning: ' + filename + ' failed to render (possibly a cross-origin reference in the source). Check console.', 'err');
           continue;
         }
-        generatedFiles.push({filename, size, blob, dataUrl, required});
-        if(size === 16 || size === 32) icoSourcePngs.push({size, blob});
+        generatedFiles.push({filename, size, blob, dataUrl, required, folder});
+        if(folder === 'Icons' && (size === 16 || size === 32)) icoSourcePngs.push({size, blob});
 
         const cell = document.createElement('div');
         cell.className = 'cell' + (required ? ' required' : '');
@@ -442,18 +612,19 @@ generateBtn.addEventListener('click', async () => {
         gridEl.appendChild(cell);
       } catch(err){
         console.error('Failed to rasterize', size, err);
-        setStatus('Warning: ' + filename + ' failed to render (' + (err && err.message ? err.message : 'invalid or unsupported SVG') + '). Check console.', 'err');
+        setStatus('Warning: ' + filename + ' failed to render (' + (err && err.message ? err.message : 'invalid or unsupported source') + '). Check console.', 'err');
       }
     }
   }
 
-  await renderInto(REQUIRED_SIZES, gridRequired, true);
-  await renderInto(EXTRA_SIZES, gridExtra, false);
+  await renderInto(REQUIRED_SIZES, gridRequired, true, 'Icons');
+  await renderInto(LOGO_SIZES, gridLogos, true, 'Logos');
+  await renderInto(EXTRA_SIZES, gridExtra, false, 'Icons');
 
   // Build favicon.ico from the 16 and 32 px PNGs
   try{
     const icoBlob = await buildIco(icoSourcePngs.sort((a,b) => a.size - b.size));
-    generatedFiles.push({filename: 'favicon.ico', size: null, blob: icoBlob, dataUrl: null, required: true});
+    generatedFiles.push({filename: 'favicon.ico', size: null, blob: icoBlob, dataUrl: null, required: true, folder: 'Icons'});
 
     const cell = document.createElement('div');
     cell.className = 'cell required';
@@ -489,12 +660,15 @@ generateBtn.addEventListener('click', async () => {
 
 function updateHeadSnippet(){
   const folder = folderPathInput.value.trim().replace(/^\/+/, '').replace(/\/*$/, '/');
+  const logosFolder = logosFolderPathInput.value.trim().replace(/^\/+/, '').replace(/\/*$/, '/');
   const lines = [
     '<!-- App icons -->',
     `<link rel="icon" type="image/x-icon" href="${folder}favicon.ico">`,
     `<link rel="icon" type="image/png" sizes="32x32" href="${folder}favicon-32x32.png">`,
     `<link rel="icon" type="image/png" sizes="16x16" href="${folder}favicon-16x16.png">`,
     `<link rel="apple-touch-icon" sizes="180x180" href="${folder}apple-touch-icon.png">`,
+    `<link rel="icon" type="image/png" sizes="192x192" href="${logosFolder}AppIcon192px.png">`,
+    `<link rel="icon" type="image/png" sizes="512x512" href="${logosFolder}AppIcon512px.png">`,
     '<meta name="apple-mobile-web-app-capable" content="yes">',
     '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">',
     '<meta name="theme-color" content="#0d1210">',
@@ -504,6 +678,7 @@ function updateHeadSnippet(){
 }
 
 folderPathInput.addEventListener('input', updateHeadSnippet);
+logosFolderPathInput.addEventListener('input', updateHeadSnippet);
 
 document.getElementById('copyHead').addEventListener('click', () => {
   navigator.clipboard.writeText(headSnippet.textContent).then(() => {
@@ -519,15 +694,15 @@ document.getElementById('downloadZip').addEventListener('click', async () => {
   zipStatus.textContent = 'Zipping...';
   try{
     const zip = new JSZip();
-    // Pack files directly under AppFiles/Icons/ so the zip can be extracted
-    // straight into the app's project root.
-    const folder = zip.folder('AppFiles').folder('Icons');
+    const appFilesRoot = zip.folder('AppFiles');
+    const iconsFolder = appFilesRoot.folder('Icons');
+    const logosFolder = appFilesRoot.folder('Logos');
 
     let added = 0;
     const failed = [];
 
     for(const item of generatedFiles){
-      const { filename, blob } = item;
+      const { filename, blob, folder } = item;
       if(!blob){
         failed.push(filename + ' (no image data)');
         continue;
@@ -541,7 +716,8 @@ document.getElementById('downloadZip').addEventListener('click', async () => {
           failed.push(filename + ' (empty file)');
           continue;
         }
-        folder.file(filename, buf);
+        const targetFolder = folder === 'Logos' ? logosFolder : iconsFolder;
+        targetFolder.file(filename, buf);
         added++;
       } catch(itemErr){
         console.error('Failed to add', filename, itemErr);
@@ -560,7 +736,7 @@ document.getElementById('downloadZip').addEventListener('click', async () => {
     const content = await zip.generateAsync({type:'blob'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(content);
-    a.download = 'AppFiles-Icons.zip';
+    a.download = 'AppFiles.zip';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -571,7 +747,7 @@ document.getElementById('downloadZip').addEventListener('click', async () => {
       zipStatus.textContent = `Downloaded ${added} file(s). Skipped: ${failed.join(', ')} — see console.`;
     } else {
       zipStatus.className = 'status ok';
-      zipStatus.textContent = `Downloaded AppFiles-Icons.zip with ${added} file(s) — unzip into your app's project root.`;
+      zipStatus.textContent = `Downloaded AppFiles.zip with ${added} file(s) — unzip into your app's project root (Icons/ and Logos/ subfolders included).`;
     }
   } catch(err){
     console.error(err);
