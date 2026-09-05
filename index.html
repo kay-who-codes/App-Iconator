@@ -198,7 +198,6 @@ const previewLabel = document.getElementById('previewLabel');
 const resultsCard = document.getElementById('resultsCard');
 const headerCard = document.getElementById('headerCard');
 const gridRequired = document.getElementById('gridRequired');
-const gridExtra = document.getElementById('gridExtra');
 const gridLogos = document.getElementById('gridLogos');
 const zipStatus = document.getElementById('zipStatus');
 const folderPathInput = document.getElementById('folderPath');
@@ -413,7 +412,6 @@ clearBtn.addEventListener('click', () => {
   resultsCard.classList.add('hidden');
   headerCard.classList.add('hidden');
   gridRequired.innerHTML = '';
-  gridExtra.innerHTML = '';
   gridLogos.innerHTML = '';
   generatedFiles = [];
   setStatus('');
@@ -567,7 +565,6 @@ generateBtn.addEventListener('click', async () => {
   if(!currentSource) return;
   setStatus('Rendering all sizes...', '');
   gridRequired.innerHTML = '';
-  gridExtra.innerHTML = '';
   gridLogos.innerHTML = '';
   generatedFiles = [];
   resultsCard.classList.remove('hidden');
