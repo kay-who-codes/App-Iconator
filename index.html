@@ -529,7 +529,9 @@ function rasterize(size){
 // Builds a valid .ico file by embedding PNG data directly in an ICO container
 // (supported by all modern browsers/OSes, including favicon usage).
 async function buildIco(pngEntries){
-  // pngEntries: [{size, blob}]
+  if(!pngEntries || pngEntries.length === 0){
+    throw new Error('No source images available to build favicon.ico (16px/32px rasterization failed)');
+  }
   const buffers = await Promise.all(pngEntries.map(e => e.blob.arrayBuffer()));
   const count = buffers.length;
   const headerSize = 6 + 16 * count;
@@ -580,13 +582,18 @@ generateBtn.addEventListener('click', async () => {
   // Render the 16/32px sources needed for favicon.ico without exposing them
   // as standalone output files.
   for(const size of ICO_SOURCE_SIZES){
-    try{
-      const {blob} = await rasterize(size);
-      if(blob) icoSourcePngs.push({size, blob});
-    } catch(err){
-      console.error('Failed to rasterize ico source size', size, err);
+  try{
+    const {blob} = await rasterize(size);
+    if(blob) {
+      icoSourcePngs.push({size, blob});
+    } else {
+      setStatus(`Warning: ${size}px favicon source failed to render.`, 'err');
     }
+  } catch(err){
+    console.error('Failed to rasterize ico source size', size, err);
+    setStatus(`Warning: ${size}px favicon source failed to render (${err && err.message ? err.message : 'unknown error'}).`, 'err');
   }
+}
  
   async function renderInto(list, gridEl, required, folder){
     for(const [filename, size, desc] of list){
@@ -655,8 +662,9 @@ generateBtn.addEventListener('click', async () => {
     cell.appendChild(sub);
     gridRequired.insertBefore(cell, gridRequired.firstChild);
   } catch(err){
-    console.error('Failed to build favicon.ico', err);
-  }
+  console.error('Failed to build favicon.ico', err);
+  setStatus('favicon.ico could not be generated: ' + err.message, 'err');
+}
  
   setStatus('Generated ' + generatedFiles.length + ' files.', 'ok');
   updateHeadSnippet();
